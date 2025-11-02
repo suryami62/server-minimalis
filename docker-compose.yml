@@ -1,0 +1,108 @@
+# ===================================================================================
+# Docker Compose Konfigurasi untuk Nginx Proxy Manager dengan Database PostgreSQL
+# ===================================================================================
+#
+# Versi file Docker Compose. '3.8' adalah versi yang stabil dan modern.
+version: "3.8"
+
+# Blok utama tempat semua layanan (kontainer) didefinisikan.
+services:
+  # --- Layanan 1: Nginx Proxy Manager (Aplikasi Utama) ---
+  app:
+    # Menggunakan image Docker resmi untuk Nginx Proxy Manager.
+    # Tag ':latest' akan mengambil versi terbaru yang stabil.
+    image: "jc21/nginx-proxy-manager:latest"
+
+    # Memberikan nama yang mudah dikenali pada kontainer saat berjalan.
+    container_name: nginx-proxy-manager
+
+    # Kebijakan restart. 'unless-stopped' memastikan kontainer akan otomatis
+    # dimulai ulang jika terjadi crash atau saat server reboot, kecuali jika
+    # dihentikan secara manual. Ini penting untuk ketersediaan layanan.
+    restart: unless-stopped
+
+    # Memetakan port dari host ke kontainer. Formatnya adalah 'HOST:CONTAINER'.
+    ports:
+      - "80:80"   # Port standar untuk lalu lintas HTTP.
+      - "443:443" # Port standar untuk lalu lintas HTTPS (SSL/TLS).
+      - "81:81"   # Port untuk mengakses antarmuka Web Admin Nginx Proxy Manager.
+
+    # Variabel lingkungan yang disuntikkan ke dalam kontainer untuk konfigurasi.
+    environment:
+      # Secara eksplisit memberitahu NPM untuk menggunakan driver database PostgreSQL.
+      DB_TYPE: postgres
+      # Hostname dari layanan database. 'db' adalah nama layanan database di bawah.
+      # Docker Compose secara otomatis mengelola DNS internal di dalam jaringan kustom.
+      DB_POSTGRES_HOST: "db"
+      # Port standar untuk PostgreSQL.
+      DB_POSTGRES_PORT: 5432
+      # Kredensial untuk terhubung ke database.
+      # Sintaks ${...} mengambil nilai dari file .env di direktori yang sama.
+      # Ini adalah praktik terbaik untuk menjaga kerahasiaan kredensial.
+      DB_POSTGRES_USER: ${POSTGRES_USER}
+      DB_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_POSTGRES_NAME: ${POSTGRES_DB}
+
+    # Mendefinisikan volume untuk menyimpan data secara persisten di mesin host.
+    volumes:
+      # Menyimpan semua data konfigurasi NPM (proxy hosts, users, access lists).
+      - ./data:/data
+      # Menyimpan sertifikat SSL/TLS yang dihasilkan oleh Let's Encrypt.
+      # Ini penting agar sertifikat tidak perlu dibuat ulang setiap kali kontainer restart.
+      - ./letsencrypt:/etc/letsencrypt
+
+    # Menentukan urutan start-up. Kontainer ini ('app') akan menunggu
+    # kontainer 'db' untuk dimulai terlebih dahulu. Mencegah error koneksi database.
+    depends_on:
+      - db
+
+    # Menghubungkan kontainer ini ke jaringan yang telah ditentukan.
+    networks:
+      # Jaringan internal untuk komunikasi antara NPM dan databasenya.
+      - npm-network
+      # Jaringan eksternal untuk berkomunikasi dengan aplikasi lain yang akan di-proxy.
+      - app-network
+
+  # --- Layanan 2: Database PostgreSQL ---
+  db:
+    # Menggunakan image resmi PostgreSQL v18.0 dengan basis Alpine Linux.
+    # Varian 'alpine' lebih kecil ukurannya, menghemat ruang disk dan lebih efisien.
+    image: "postgres:18.0-alpine"
+
+    # Memberikan nama yang mudah dikenali pada kontainer database.
+    container_name: npm-db-postgres
+
+    # Kebijakan restart yang sama untuk memastikan database selalu tersedia untuk aplikasi.
+    restart: unless-stopped
+
+    # Variabel lingkungan ini digunakan oleh image PostgreSQL saat pertama kali
+    # dijalankan untuk menginisialisasi database, pengguna, dan kata sandi.
+    # Nilai-nilai ini HARUS SAMA dengan yang digunakan oleh layanan 'app'.
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+    # Memetakan direktori data internal PostgreSQL ke direktori di mesin host.
+    # Ini memastikan semua data di dalam database tetap aman dan persisten.
+    volumes:
+      - ./data/postgresql:/var/lib/postgresql/18/docker
+
+    # Menghubungkan kontainer database hanya ke jaringan internal.
+    # Ini adalah praktik keamanan yang baik; database tidak perlu terekspos
+    # ke jaringan aplikasi lain, hanya ke Nginx Proxy Manager.
+    networks:
+      - npm-network
+
+# Blok utama tempat jaringan kustom didefinisikan.
+# Menggunakan jaringan kustom adalah praktik terbaik untuk isolasi dan keamanan.
+networks:
+  # Jaringan backend untuk komunikasi khusus antara NPM dan databasenya.
+  npm-network:
+    driver: bridge
+
+  # Jaringan frontend/umum yang akan digunakan oleh NPM untuk menemukan
+  # dan berkomunikasi dengan layanan/kontainer lain yang ingin Anda proxy.
+  # (Contoh: kontainer blog, Nextcloud, dll, juga harus terhubung ke jaringan ini).
+  app-network:
+    driver: bridge
