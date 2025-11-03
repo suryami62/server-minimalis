@@ -1,70 +1,71 @@
 # server-minimalis
 
-## Deskripsi Singkat
-Proyek ini mengorkestrasi Nginx Proxy Manager dengan backend database PostgreSQL menggunakan Docker Compose, menyediakan solusi manajemen proxy yang efisien dan persisten.
+## Description
+This project orchestrates Nginx Proxy Manager with a PostgreSQL database backend using Docker Compose, providing an efficient and persistent proxy management solution.
 
-## Fitur Utama
-- Konfigurasi melalui berkas environment.
-- Dukungan orkestrasi via Docker Compose.
-- Manajemen proxy HTTP/S yang mudah dengan Nginx Proxy Manager.
-- Penyimpanan data persisten untuk Nginx Proxy Manager dan PostgreSQL.
+## Key Features
+- Configuration via environment file.
+- Orchestration support through Docker Compose.
+- Easy HTTP/S proxy management with Nginx Proxy Manager.
+- Persistent data storage for both Nginx Proxy Manager and PostgreSQL.
 
-## Prasyarat
-Untuk menjalankan proyek ini, Anda memerlukan instalasi berikut di sistem Anda:
-- Docker (versi generik)
-- Docker Compose (versi generik)
+## Prerequisites
+To run this project, you need the following installed on your system:
+- Docker (generic version)
+- Docker Compose (generic version)
 
-## Quick Start (dengan Docker)
-Ikuti langkah-langkah di bawah untuk memulai layanan dengan Docker Compose:
+## Quick Start (with Docker)
+Follow the steps below to start the services using Docker Compose:
 
-1.  Duplikasi berkas [`.env.example`](.env.example) menjadi `.env` di root proyek dan sesuaikan nilai-nilai variabel lingkungan sesuai kebutuhan Anda. Pastikan untuk mengganti kata sandi default dengan yang kuat.
+1. Duplicate the [`.env.example`](.env.example) file to `.env` in the project root and adjust the environment variable values as needed.  
+   Make sure to replace the default password with a strong one.
 
-    ```bash
-    cp .env.example .env
-    ```
+   ```bash
+   cp .env.example .env
+   ```
 
-2.  Jalankan perintah Docker Compose untuk menyalakan semua layanan dalam mode detached (berjalan di latar belakang):
+2. Run Docker Compose to start all services in detached mode (running in the background):
 
-    ```bash
-    docker compose up -d
-    ```
+   ```bash
+   docker compose up -d
+   ```
 
-3.  Setelah layanan berjalan, Anda dapat mengakses antarmuka web Nginx Proxy Manager melalui:
-    - `http://localhost:81` (untuk antarmuka admin)
-    - `http://localhost:80` (untuk lalu lintas HTTP yang akan diproxy)
-    - `https://localhost:443` (untuk lalu lintas HTTPS yang akan diproxy)
+3. Once the services are running, you can access the Nginx Proxy Manager web interface at:
+   - `http://localhost:81` (Admin interface)
+   - `http://localhost:80` (HTTP traffic to be proxied)
+   - `https://localhost:443` (HTTPS traffic to be proxied)
 
-4.  Untuk mematikan dan menghapus semua kontainer, jaringan, dan volume yang dibuat oleh Docker Compose:
+4. To stop and remove all containers, networks, and volumes created by Docker Compose:
 
-    ```bash
-    docker compose down
-    ```
+   ```bash
+   docker compose down
+   ```
 
-## Konfigurasi Environment
-Variabel lingkungan yang dapat Anda atur di berkas `.env` Anda:
+## Environment Configuration
+The following environment variables can be set in your `.env` file:
 
-| Nama             | Deskripsi                                                                                                                                                 | Contoh/Nilai Default                  |
-| :--------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------ |
-| `POSTGRES_DB`    | Nama database PostgreSQL yang akan dibuat dan digunakan oleh Nginx Proxy Manager.                                                                         | `npm`                                 |
-| `POSTGRES_USER`  | Nama pengguna database PostgreSQL yang akan dibuat dan digunakan oleh Nginx Proxy Manager.                                                                | `npm`                                 |
-| `POSTGRES_PASSWORD` | Kata sandi untuk pengguna database PostgreSQL. **PENTING: Ganti dengan kata sandi yang kuat dan unik.**                                                       | `ganti_dengan_kata_sandi_yang_sangat_kuat` |
+| Name              | Description                                                                                          | Example/Default Value                  |
+| :---------------- | :--------------------------------------------------------------------------------------------------- | :------------------------------------- |
+| `POSTGRES_DB`     | Name of the PostgreSQL database to be created and used by Nginx Proxy Manager.                       | `npm`                                  |
+| `POSTGRES_USER`   | PostgreSQL database user to be created and used by Nginx Proxy Manager.                              | `npm`                                  |
+| `POSTGRES_PASSWORD` | Password for the PostgreSQL database user. **IMPORTANT: Replace with a strong and unique password.** | `replace_with_a_very_strong_password`  |
 
-## Layanan dan Orkestrasi (Docker Compose)
-Proyek ini mendefinisikan dua layanan utama dalam [`docker-compose.yml`](docker-compose.yml):
+## Services and Orchestration (Docker Compose)
+This project defines two main services in [`docker-compose.yml`](docker-compose.yml):
 
 ### Service: `app` (Nginx Proxy Manager)
 - **Image**: `jc21/nginx-proxy-manager:latest`
 - **Port Mapping**:
-    - `80:80` (HTTP)
-    - `443:443` (HTTPS)
-    - `81:81` (Web Admin UI)
+  - `80:80` (HTTP)
+  - `443:443` (HTTPS)
+  - `81:81` (Web Admin UI)
 - **Volumes**:
-    - `./data:/data`: Menyimpan data konfigurasi Nginx Proxy Manager.
-    - `./letsencrypt:/etc/letsencrypt`: Menyimpan sertifikat SSL/TLS.
+  - `./data:/data`: Stores Nginx Proxy Manager configuration data.
+  - `./letsencrypt:/etc/letsencrypt`: Stores SSL/TLS certificates.
 - **Environment Keys**: `DB_TYPE`, `DB_POSTGRES_HOST`, `DB_POSTGRES_PORT`, `DB_POSTGRES_USER`, `DB_POSTGRES_PASSWORD`, `DB_POSTGRES_NAME`
 
 ### Service: `db` (PostgreSQL Database)
 - **Image**: `postgres:18.0-alpine`
 - **Volumes**:
-    - `./data/postgresql:/var/lib/postgresql/18/docker`: Menyimpan data database PostgreSQL secara persisten.
+  - `./data/postgresql:/var/lib/postgresql/18/docker`: Stores PostgreSQL database data persistently.
 - **Environment Keys**: `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`
