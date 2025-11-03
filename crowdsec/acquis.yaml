@@ -1,0 +1,4 @@
+filenames:
+  - /data/logs/*.log
+labels:
+  type: nginx-proxy-manager

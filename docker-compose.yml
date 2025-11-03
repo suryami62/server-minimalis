@@ -1,109 +1,197 @@
 # ===================================================================================
-# Docker Compose Configuration for Nginx Proxy Manager with PostgreSQL Database
-# ===================================================================================
+# Docker Compose Configuration for Nginx Proxy Manager
 #
-# Docker Compose file version. '3.8' is a stable and modern version.
+# This file defines a multi-container setup for running Nginx Proxy Manager (NPM),
+# a PostgreSQL database for its data, and CrowdSec for security.
+#
+# Best Practices Followed:
+#   - Explicit service definitions for clarity.
+#   - Use of a dedicated internal network for security.
+#   - Use of an external network for proxying other applications.
+#   - Persistent data storage using named volumes.
+#   - Secure credential management using an .env file.
+#   - Automated service restarts to ensure high availability.
+# ===================================================================================
+
+# Docker Compose file version. '3.8' is a stable and modern version that supports
+# all features used in this configuration.
 version: "3.8"
 
-# Main block where all services (containers) are defined.
+# ===================================================================================
+# Service Definitions
+#
+# The 'services' block is where all application containers are defined. Each
+# service runs in its own isolated environment but can communicate with others
+# over shared networks.
+# ===================================================================================
 services:
   # --- Service 1: Nginx Proxy Manager (Main Application) ---
+  # This is the core service that provides the reverse proxy functionality and web UI.
   app:
     # Use the official Docker image for Nginx Proxy Manager.
-    # The ':latest' tag pulls the latest stable version.
+    # The ':latest' tag pulls the most recent stable version.
     image: "jc21/nginx-proxy-manager:latest"
 
-    # Assign a recognizable name to the container when running.
+    # Assign a recognizable and static name to the container for easier management.
     container_name: nginx-proxy-manager
 
-    # Restart policy. 'unless-stopped' ensures the container will
-    # automatically restart if it crashes or the server reboots,
-    # unless it is manually stopped. This is important for availability.
+    # Restart policy. 'unless-stopped' ensures the container automatically
+    # restarts if it crashes or the server reboots. This is crucial for keeping
+    # your proxied services online. It will not start on boot if manually stopped.
     restart: unless-stopped
 
-    # Map ports from host to container. Format: 'HOST:CONTAINER'.
+    # --- Port Mappings (Host:Container) ---
+    # Maps ports from the host machine to the container. This exposes NPM's
+    # services to the outside world.
     ports:
-      - "80:80"   # Standard port for HTTP traffic.
-      - "443:443" # Standard port for HTTPS (SSL/TLS) traffic.
-      - "81:81"   # Port for accessing the Nginx Proxy Manager Web Admin UI.
+      # Forwards standard HTTP traffic from the host to the container.
+      - "80:80"
+      # Forwards standard HTTPS (SSL/TLS) traffic from the host to the container.
+      - "443:443"
+      # Exposes the Nginx Proxy Manager web administration UI.
+      - "81:81"
 
-    # Environment variables injected into the container for configuration.
+    # --- Environment Variables ---
+    # Injects configuration settings into the container at runtime.
     environment:
-      # Explicitly tell NPM to use the PostgreSQL database driver.
+      # Specifies the database type. NPM will use the PostgreSQL driver.
       DB_TYPE: postgres
-      # Hostname of the database service. 'db' refers to the database service below.
-      # Docker Compose automatically manages internal DNS within the custom network.
+      # The hostname of the database service. Docker Compose's internal DNS
+      # resolves 'db' to the IP address of the 'db' service container.
       DB_POSTGRES_HOST: "db"
-      # Standard port for PostgreSQL.
+      # The standard network port for PostgreSQL.
       DB_POSTGRES_PORT: 5432
-      # Credentials for connecting to the database.
-      # The ${...} syntax pulls values from the .env file in the same directory.
-      # This is best practice to keep credentials secure.
+      # --- Database Credentials ---
+      # These values are securely loaded from the .env file in the same directory.
+      # This practice prevents hardcoding sensitive information in version control.
       DB_POSTGRES_USER: ${POSTGRES_USER}
       DB_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       DB_POSTGRES_NAME: ${POSTGRES_DB}
 
-    # Define volumes to persist data on the host machine.
+    # --- Volume Mappings (Host:Container) ---
+    # Persists container data on the host machine, ensuring that critical
+    # information is not lost when the container is recreated or updated.
     volumes:
-      # Store all NPM configuration data (proxy hosts, users, access lists).
+      # Stores all NPM configuration data (e.g., proxy hosts, users, access lists).
       - ./data:/data
-      # Store SSL/TLS certificates generated by Let's Encrypt.
-      # This ensures certificates don’t need to be reissued every container restart.
+      # Stores SSL/TLS certificates generated by Let's Encrypt, so they don't
+      # need to be re-issued every time the container restarts.
       - ./letsencrypt:/etc/letsencrypt
+      # Persists log files for auditing, debugging, and security analysis.
+      - ./logs:/data/logs
 
-    # Define startup order. This container ('app') will wait
-    # for the 'db' container to start first. Prevents DB connection errors.
+    # --- Service Dependencies ---
+    # Defines the startup order. The 'app' container will wait for the 'db'
+    # container to be healthy before starting. This prevents connection
+    # errors if the application starts faster than the database.
     depends_on:
       - db
 
-    # Connect this container to the defined networks.
+    # --- Network Connections ---
+    # Connects this container to the specified networks.
     networks:
-      # Internal network for communication between NPM and its database.
+      # Internal network for secure communication between NPM and its database.
       - npm-network
-      # External network for communication with other applications to be proxied.
+      # External network for communication with other application containers
+      # that you intend to proxy (e.g., a blog, a wiki, etc.).
       - app-network
 
   # --- Service 2: PostgreSQL Database ---
+  # This service runs a PostgreSQL database instance dedicated to storing NPM's
+  # configuration, users, and proxy host information.
   db:
-    # Use the official PostgreSQL v18.0 image based on Alpine Linux.
-    # The 'alpine' variant is smaller, saving disk space and improving efficiency.
+    # Use the official PostgreSQL image. The 'alpine' variant is lightweight,
+    # which saves disk space and reduces the attack surface.
     image: "postgres:18.0-alpine"
 
     # Assign a recognizable name to the database container.
-    container_name: npm-db-postgres
+    container_name: npm-postgres
 
-    # Same restart policy to ensure the database is always available to the app.
+    # Same restart policy as the 'app' service to ensure the database is
+    # always available when the main application needs it.
     restart: unless-stopped
 
-    # Environment variables used by the PostgreSQL image on first run
-    # to initialize the database, user, and password.
-    # These values MUST MATCH those used by the 'app' service.
+    # --- Environment Variables ---
+    # Used by the PostgreSQL image on its first run to initialize the database,
+    # create a user, and set a password. These values MUST match the credentials
+    # used by the 'app' service.
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
 
-    # Map PostgreSQL’s internal data directory to a host directory.
-    # This ensures all database data remains safe and persistent.
+    # --- Volume Mapping ---
+    # Maps PostgreSQL’s internal data directory to a directory on the host.
+    # This is critical for ensuring all database data is persistent.
     volumes:
       - ./data/postgresql:/var/lib/postgresql/18/docker
 
-    # Connect the database container only to the internal network.
-    # This is a good security practice; the database doesn’t need to be exposed
-    # to other application networks, only to Nginx Proxy Manager.
+    # --- Network Connections ---
+    # Connects the database container only to the internal network. This is a key
+    # security practice, as it isolates the database from all other networks,
+    # preventing direct access from the outside or from other proxied apps.
     networks:
       - npm-network
 
-# Main block where custom networks are defined.
-# Using custom networks is best practice for isolation and security.
+  # --- Service 3: CrowdSec (Intrusion Prevention System) ---
+  # This service provides an extra layer of security by monitoring logs, detecting
+  # malicious behavior (e.g., bots, scrapers, scanners), and blocking threats.
+  crowdsec:
+    # Use the official lightweight 'slim' image for CrowdSec.
+    image: crowdsecurity/crowdsec:slim
+    container_name: npm-crowdsec
+    restart: unless-stopped
+    
+    # --- Port Mappings ---
+    # Exposes the CrowdSec API only on the host's loopback interface. This allows
+    # other local services to interact with it without exposing it to the public.
+    ports:
+      - "127.0.0.1:8080:8080"
+      
+    # --- Environment Variables ---
+    # Automatically installs the necessary collection to parse NPM logs.
+    environment:
+      COLLECTIONS: "crowdsecurity/nginx-proxy-manager"
+      
+    # --- Volume Mappings ---
+    # Persists CrowdSec configuration, data, and connects to NPM's logs.
+    volumes:
+      # Main configuration file for log sources (acquisitions).
+      - ./crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml
+      # Stores CrowdSec's operational data (e.g., detected IP addresses).
+      - ./crowdsec/data:/var/lib/crowdsec/data
+      # General configuration directory.
+      - ./crowdsec/config:/etc/crowdsec
+      # Mounts the NPM log directory in read-only mode for analysis.
+      - ./logs:/data/logs:ro
+      
+    # --- Service Dependencies ---
+    # Ensures CrowdSec starts after the 'app' service is running, so that
+    # the log files it needs to monitor are available.
+    depends_on:
+      - app
+      
+    # --- Network Connections ---
+    # Connects to the internal network to communicate with other services if needed.
+    networks:
+      - npm-network
+
+# ===================================================================================
+# Network Definitions
+#
+# Using custom networks is a best practice for isolating containers and enhancing
+# security. It also provides reliable DNS resolution between containers.
+# ===================================================================================
 networks:
-  # Backend network for dedicated communication between NPM and its database.
+  # --- Internal Backend Network ---
+  # A private bridge network for dedicated communication between NPM, its
+  # database, and other tightly coupled services like CrowdSec.
   npm-network:
     driver: bridge
 
-  # Frontend/public network used by NPM to discover
-  # and communicate with other services/containers you want to proxy.
-  # (Example: blog container, Nextcloud, etc. must also connect to this network).
+  # --- External Frontend Network ---
+  # A bridge network used by NPM to discover and communicate with other standalone
+  # services/containers you want to expose via the reverse proxy. Any container
+  # that needs to be proxied by NPM must be connected to this network.
   app-network:
     driver: bridge
-    
